@@ -2,31 +2,31 @@
 const API_ENDPOINT = 'https://script.google.com/macros/s/AKfycbz2qff-CsSOJOax66WCspC5P7arcIUPi580x2_9oY2iUYp2QjzKCybS6OT86jpUum0Q/exec';
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Attach listeners to the static Add buttons using their new IDs (from the previous correction)
+    // Attach listeners to the static Add buttons using their IDs
     document.getElementById('add-member-btn').addEventListener('click', addMember);
     document.getElementById('add-child-btn').addEventListener('click', addChild);
 
     // Use event delegation for the dynamically added elements (Remove buttons, Select fields, Date fields)
     document.addEventListener('click', function(e) {
+        // Handle Remove buttons (using event delegation on a generic class)
         if (e.target.classList.contains('remove-btn')) {
             removeSection(e.target);
         }
     });
 
     document.addEventListener('change', function(e) {
-        // Toggle Sacraments/Dikabelo fields when a SELECT changes
+        // Handle Sacraments/Dikabelo fields toggle
         if (e.target.tagName === 'SELECT' && e.target.hasAttribute('onchange')) {
             const classNameMatch = e.target.getAttribute('onchange').match(/toggleFields\(this, '(.*?)'\)/);
             if (classNameMatch) {
                 toggleFields(e.target, classNameMatch[1]);
             }
         }
-        // Calculate Age when Date of Birth changes
+        // Handle Age calculation for children's Date of Birth
         if (e.target.getAttribute('data-name') === 'Date_of_Birth' && e.target.closest('.child-section')) {
             calculateAge(e.target);
         }
     });
-
 
     // Add the initial member section when the page loads
     addMember(); 
@@ -34,7 +34,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('census-form').addEventListener('submit', handleFormSubmit);
 });
 
-// Helper function to toggle conditional fields (e.g., date of baptism)
+
+// === CORE UTILITY FUNCTIONS (Kept global for easy access from HTML onchange attributes) ===
+
+/** Toggles visibility of conditional fields (e.g., date of baptism). */
 function toggleFields(selectElement, className) {
     const parent = selectElement.closest('.section-box');
     const fields = parent.querySelector(`.${className}-fields`);
@@ -45,7 +48,7 @@ function toggleFields(selectElement, className) {
     }
 }
 
-// Calculates age based on Date of Birth for children
+/** Calculates age based on Date of Birth for children. */
 function calculateAge(dobInput) {
     const dob = new Date(dobInput.value);
     const today = new Date();
@@ -58,7 +61,7 @@ function calculateAge(dobInput) {
     parent.querySelector('[data-name="Age"]').value = age >= 0 ? age : '';
 }
 
-// Clones the member template and appends it to the container
+/** Clones the member template and appends it to the container. */
 function addMember() {
     const membersContainer = document.getElementById('members-container');
     const memberCount = membersContainer.querySelectorAll('.member-section').length + 1;
@@ -67,12 +70,10 @@ function addMember() {
     const newSection = template.content.cloneNode(true).querySelector('.member-section');
     newSection.querySelector('.member-number').textContent = memberCount;
 
-    // 🌟 FIX: Run toggleFields for default values upon cloning 🌟
+    // Initialize conditional fields based on default select value
     newSection.querySelectorAll('select[onchange]').forEach(select => {
-        // Extract the className (e.g., 'baptism', 'communion') from the onchange attribute
         const classNameMatch = select.getAttribute('onchange').match(/toggleFields\(this, '(.*?)'\)/);
         if (classNameMatch) {
-            // Manually call the toggle function to set initial display state
             toggleFields(select, classNameMatch[1]);
         }
     });
@@ -80,7 +81,7 @@ function addMember() {
     membersContainer.appendChild(newSection);
 }
 
-// Clones the child template and appends it to the container
+/** Clones the child template and appends it to the container. */
 function addChild() {
     const childrenContainer = document.getElementById('children-container');
     const childCount = childrenContainer.querySelectorAll('.child-section').length + 1;
@@ -89,12 +90,10 @@ function addChild() {
     const newSection = template.content.cloneNode(true).querySelector('.child-section');
     newSection.querySelector('.child-number').textContent = childCount;
 
-    // 🌟 FIX: Run toggleFields for default values upon cloning 🌟
+    // Initialize conditional fields based on default select value
     newSection.querySelectorAll('select[onchange]').forEach(select => {
-        // Extract the className (e.g., 'baptism', 'communion') from the onchange attribute
         const classNameMatch = select.getAttribute('onchange').match(/toggleFields\(this, '(.*?)'\)/);
         if (classNameMatch) {
-            // Manually call the toggle function to set initial display state
             toggleFields(select, classNameMatch[1]);
         }
     });
@@ -102,7 +101,7 @@ function addChild() {
     childrenContainer.appendChild(newSection);
 }
 
-// Removes a dynamic section
+/** Removes a dynamic section. */
 function removeSection(button) {
     if (!confirm('Are you sure you want to remove this entry?')) return;
     const section = button.closest('.section-box');
@@ -110,7 +109,7 @@ function removeSection(button) {
 }
 
 
-// --- DATA COLLECTION AND SUBMISSION (No changes needed here) ---
+// === DATA COLLECTION AND SUBMISSION ===
 
 function getSectionData(selector) {
     const dataArray = [];
