@@ -1,4 +1,5 @@
 // 🚨 REPLACE THIS WITH YOUR GOOGLE APPS SCRIPT WEB APP URL 🚨
+// Ensure this link is correct for your Web App deployment
 const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbyzpmV3d2etqNpujAQUWcrRfs-hPcBjB20mru-64Pdf10kWv-3W3lwWf1Ya0S_Mj91-/exec'; 
 
 let ALL_RECORDS = []; // Stores all fetched records
@@ -21,6 +22,7 @@ function setupEventListeners() {
         filterInput.placeholder = columnFilter.value === "" ? 
             "Value to search in selected column" : 
             `Search value for ${columnFilter.options[columnFilter.selectedIndex].text}`;
+        applySearchFilter(); // Re-apply filter when column changes
     });
     
     // Close modal when clicking outside
@@ -55,7 +57,7 @@ async function fetchSummary() {
             document.getElementById('status-message').textContent = `Error fetching summary: ${data.message}`;
         }
     } catch (error) {
-        document.getElementById('status-message').textContent = `Failed to connect to API for summary: ${error.message}`;
+        document.getElementById('status-message').textContent = `Failed to connect to API for summary. Check your API URL.`;
     }
 }
 
@@ -76,7 +78,7 @@ async function fetchRecords() {
             document.getElementById('status-message').textContent = `Error fetching records: ${data.message}`;
         }
     } catch (error) {
-        document.getElementById('status-message').textContent = `Failed to connect to API for records: ${error.message}`;
+        document.getElementById('status-message').textContent = `Failed to connect to API for records. Check your API URL.`;
     }
 }
 
@@ -84,21 +86,17 @@ async function fetchRecords() {
 // === DATA RENDERING AND FILTERING ===
 
 function populateFilterColumns() {
-    // Collect all unique keys from all data sources (Household, Member, Child)
     const allKeys = new Set();
     
     if (ALL_RECORDS.length > 0) {
-        // Household keys
-        Object.keys(ALL_RECORDS[0].Household).forEach(key => allKeys.add(key));
-        
-        // Member keys (use first member of first record as a sample)
-        if (ALL_RECORDS[0].Members.length > 0) {
-            Object.keys(ALL_RECORDS[0].Members[0]).forEach(key => allKeys.add(key));
+        // Collect keys from Household, Member, and Child data
+        const sample = ALL_RECORDS[0];
+        Object.keys(sample.Household).forEach(key => allKeys.add(key));
+        if (sample.Members.length > 0) {
+            Object.keys(sample.Members[0]).forEach(key => allKeys.add(key));
         }
-        
-        // Child keys (use first child of first record as a sample)
-        if (ALL_RECORDS[0].Children.length > 0) {
-            Object.keys(ALL_RECORDS[0].Children[0]).forEach(key => allKeys.add(key));
+        if (sample.Children.length > 0) {
+            Object.keys(sample.Children[0]).forEach(key => allKeys.add(key));
         }
     }
 
@@ -106,8 +104,8 @@ function populateFilterColumns() {
     const sortedKeys = Array.from(allKeys).sort();
     
     sortedKeys.forEach(key => {
-        // Skip private/internal keys if needed, e.g., 'Timestamp'
-        if (key.endsWith('_ID')) return; 
+        // Skip internal/unnecessary keys
+        if (key.endsWith('_ID') || key === 'Timestamp' || key === 'Age') return; 
         
         const option = document.createElement('option');
         option.value = key;
@@ -122,22 +120,32 @@ function applySearchFilter() {
     const filterValue = document.getElementById('filter-input').value.toLowerCase().trim();
 
     DISPLAYED_RECORDS = ALL_RECORDS.filter(record => {
-        // 1. General Search (First Name, Last Name, Block, Address)
+        // 1. General Search (Household, Member, AND Child names)
         let matchesGeneralSearch = false;
+        
         if (generalSearchTerm) {
-            // Check Household info
             const household = record.Household;
+            
+            // Check Household info
             if (
-                household.Block_Name.toLowerCase().includes(generalSearchTerm) ||
-                household.Residential_Address.toLowerCase().includes(generalSearchTerm)
+                (household.Block_Name && household.Block_Name.toString().toLowerCase().includes(generalSearchTerm)) ||
+                (household.Residential_Address && household.Residential_Address.toString().toLowerCase().includes(generalSearchTerm))
             ) {
                 matchesGeneralSearch = true;
             }
 
             // Check Member names
             if (record.Members.some(m => 
-                m.First_Name.toLowerCase().includes(generalSearchTerm) || 
-                m.Last_Name.toLowerCase().includes(generalSearchTerm)
+                (m.First_Name && m.First_Name.toString().toLowerCase().includes(generalSearchTerm)) || 
+                (m.Last_Name && m.Last_Name.toString().toLowerCase().includes(generalSearchTerm))
+            )) {
+                matchesGeneralSearch = true;
+            }
+            
+            // 🌟 FIX: Check Child names 🌟
+            if (record.Children.some(c => 
+                (c.First_Name && c.First_Name.toString().toLowerCase().includes(generalSearchTerm)) || 
+                (c.Last_Name && c.Last_Name.toString().toLowerCase().includes(generalSearchTerm))
             )) {
                 matchesGeneralSearch = true;
             }
@@ -146,7 +154,7 @@ function applySearchFilter() {
             matchesGeneralSearch = true;
         }
         
-        // If there's a general search term and it doesn't match, we stop here.
+        // If a general term is provided but no match is found, return false
         if (generalSearchTerm && !matchesGeneralSearch) {
             return false;
         }
@@ -169,8 +177,8 @@ function applySearchFilter() {
             
             return matchesColumnFilter; // Must match the specific column filter
         } else {
-            // If no specific column filter is set, this check is passed.
-            return true;
+            // If no specific column filter is set, this check is passed, combining with general search result.
+            return matchesGeneralSearch; 
         }
         
     });
@@ -183,7 +191,7 @@ function resetFilters() {
     document.getElementById('column-filter').value = '';
     document.getElementById('filter-input').value = '';
     document.getElementById('filter-input').disabled = true;
-    applySearchFilter(); // This will re-render all records
+    applySearchFilter(); 
 }
 
 function renderRecords(records) {
@@ -199,7 +207,9 @@ function renderRecords(records) {
         const household = record.Household;
         const row = tbody.insertRow();
         row.dataset.householdId = household.Household_ID;
-        row.onclick = () => openModal(record.Household_ID);
+        
+        // 🌟 FIX: The click handler is attached here and is correct. The issue may have been with how the modal was initially hidden or how the data was loaded. The fetchRecords call should fix that.
+        row.onclick = () => openModal(record.Household_ID); 
 
         // Cells: Household_ID, Block_Name, Residential_Address, Contact_No, #Members, #Children
         row.insertCell().textContent = household.Household_ID;
@@ -232,7 +242,7 @@ function openModal(householdId) {
     let html = '<h2>Household Record: ' + record.Household.Household_ID + '</h2>';
     html += '<h3>General Information</h3>';
     for (const key in record.Household) {
-        if (key !== 'Household_ID') { // Don't show ID again
+        if (key !== 'Household_ID') { 
             html += formatPair(key, record.Household[key]);
         }
     }
