@@ -1,16 +1,40 @@
 // 🚨 REPLACE THIS WITH YOUR GOOGLE APPS SCRIPT WEB APP URL 🚨
 const API_ENDPOINT = 'https://script.google.com/macros/s/AKfycbz2qff-CsSOJOax66WCspC5P7arcIUPi580x2_9oY2iUYp2QjzKCybS6OT86jpUum0Q/exec';
 
-let memberCount = 0;
-let childCount = 0;
-
 document.addEventListener('DOMContentLoaded', () => {
+    // Attach listeners to the static Add buttons using their new IDs (from the previous correction)
+    document.getElementById('add-member-btn').addEventListener('click', addMember);
+    document.getElementById('add-child-btn').addEventListener('click', addChild);
+
+    // Use event delegation for the dynamically added elements (Remove buttons, Select fields, Date fields)
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('remove-btn')) {
+            removeSection(e.target);
+        }
+    });
+
+    document.addEventListener('change', function(e) {
+        // Toggle Sacraments/Dikabelo fields when a SELECT changes
+        if (e.target.tagName === 'SELECT' && e.target.hasAttribute('onchange')) {
+            const classNameMatch = e.target.getAttribute('onchange').match(/toggleFields\(this, '(.*?)'\)/);
+            if (classNameMatch) {
+                toggleFields(e.target, classNameMatch[1]);
+            }
+        }
+        // Calculate Age when Date of Birth changes
+        if (e.target.getAttribute('data-name') === 'Date_of_Birth' && e.target.closest('.child-section')) {
+            calculateAge(e.target);
+        }
+    });
+
+
     // Add the initial member section when the page loads
     addMember(); 
+
     document.getElementById('census-form').addEventListener('submit', handleFormSubmit);
 });
 
-// Toggles visibility of conditional fields (e.g., date of baptism)
+// Helper function to toggle conditional fields (e.g., date of baptism)
 function toggleFields(selectElement, className) {
     const parent = selectElement.closest('.section-box');
     const fields = parent.querySelector(`.${className}-fields`);
@@ -36,55 +60,64 @@ function calculateAge(dobInput) {
 
 // Clones the member template and appends it to the container
 function addMember() {
-    memberCount++;
+    const membersContainer = document.getElementById('members-container');
+    const memberCount = membersContainer.querySelectorAll('.member-section').length + 1;
+    
     const template = document.getElementById('member-template');
     const newSection = template.content.cloneNode(true).querySelector('.member-section');
     newSection.querySelector('.member-number').textContent = memberCount;
 
-    // Reset fields visibility
-    newSection.querySelectorAll('select').forEach(select => {
-        const className = select.getAttribute('onchange').match(/toggleFields\(this, '(.*?)'\)/);
-        if (className) toggleFields(select, className[1]);
+    // 🌟 FIX: Run toggleFields for default values upon cloning 🌟
+    newSection.querySelectorAll('select[onchange]').forEach(select => {
+        // Extract the className (e.g., 'baptism', 'communion') from the onchange attribute
+        const classNameMatch = select.getAttribute('onchange').match(/toggleFields\(this, '(.*?)'\)/);
+        if (classNameMatch) {
+            // Manually call the toggle function to set initial display state
+            toggleFields(select, classNameMatch[1]);
+        }
     });
 
-    document.getElementById('members-container').appendChild(newSection);
+    membersContainer.appendChild(newSection);
 }
 
 // Clones the child template and appends it to the container
 function addChild() {
-    childCount++;
+    const childrenContainer = document.getElementById('children-container');
+    const childCount = childrenContainer.querySelectorAll('.child-section').length + 1;
+
     const template = document.getElementById('child-template');
     const newSection = template.content.cloneNode(true).querySelector('.child-section');
     newSection.querySelector('.child-number').textContent = childCount;
 
-    // Reset fields visibility
-    newSection.querySelectorAll('select').forEach(select => {
-        const className = select.getAttribute('onchange').match(/toggleFields\(this, '(.*?)'\)/);
-        if (className) toggleFields(select, className[1]);
+    // 🌟 FIX: Run toggleFields for default values upon cloning 🌟
+    newSection.querySelectorAll('select[onchange]').forEach(select => {
+        // Extract the className (e.g., 'baptism', 'communion') from the onchange attribute
+        const classNameMatch = select.getAttribute('onchange').match(/toggleFields\(this, '(.*?)'\)/);
+        if (classNameMatch) {
+            // Manually call the toggle function to set initial display state
+            toggleFields(select, classNameMatch[1]);
+        }
     });
     
-    document.getElementById('children-container').appendChild(newSection);
+    childrenContainer.appendChild(newSection);
 }
 
-// Removes a dynamic section and re-numbers the remaining (optional)
+// Removes a dynamic section
 function removeSection(button) {
     if (!confirm('Are you sure you want to remove this entry?')) return;
     const section = button.closest('.section-box');
     section.remove();
-    // Simple removal, won't re-number dynamically to keep JS simple.
 }
 
-// --- DATA COLLECTION AND SUBMISSION ---
 
-// Collects data from all instances of a dynamic section (members/children)
+// --- DATA COLLECTION AND SUBMISSION (No changes needed here) ---
+
 function getSectionData(selector) {
     const dataArray = [];
     document.querySelectorAll(selector).forEach(section => {
         const sectionData = {};
-        // Find all input/select elements with a 'data-name' attribute
         section.querySelectorAll('[data-name]').forEach(input => {
             const key = input.getAttribute('data-name');
-            // Ensure empty date/text fields are submitted as empty string, not null/undefined
             sectionData[key] = input.value || ''; 
         });
         dataArray.push(sectionData);
@@ -119,7 +152,7 @@ async function handleFormSubmit(event) {
         return;
     }
 
-    // 3. Create Final Payload (matching Apps Script expected structure)
+    // 3. Create Final Payload
     const finalPayload = {
         household: householdData,
         members: membersArray, 
@@ -128,7 +161,7 @@ async function handleFormSubmit(event) {
 
     // 4. Send to Google Apps Script Web App
     try {
-        const response = await fetch(API_ENDPOINT, {
+        await fetch(API_ENDPOINT, {
             method: 'POST',
             mode: 'no-cors', 
             headers: {
@@ -136,9 +169,6 @@ async function handleFormSubmit(event) {
             },
             body: JSON.stringify(finalPayload),
         });
-
-        // Since we use 'no-cors', we cannot read the response body directly, 
-        // so we must assume success if the fetch operation completes without network error.
         
         statusMessage.className = 'alert alert-success';
         statusMessage.innerHTML = '✅ Data submitted successfully! Thank you.';
@@ -147,8 +177,6 @@ async function handleFormSubmit(event) {
         // Reset dynamic sections
         document.getElementById('members-container').innerHTML = '';
         document.getElementById('children-container').innerHTML = '';
-        memberCount = 0;
-        childCount = 0;
         addMember(); // Add back the initial member
         
     } catch (error) {
