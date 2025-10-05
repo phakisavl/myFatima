@@ -1,0 +1,270 @@
+// 🚨 REPLACE THIS WITH YOUR GOOGLE APPS SCRIPT WEB APP URL 🚨
+const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbyzpmV3d2etqNpujAQUWcrRfs-hPcBjB20mru-64Pdf10kWv-3W3lwWf1Ya0S_Mj91-/exec'; 
+
+let ALL_RECORDS = []; // Stores all fetched records
+let DISPLAYED_RECORDS = []; // Stores records currently shown in the table
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await fetchSummary();
+    await fetchRecords();
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    const searchInput = document.getElementById('search-input');
+    const columnFilter = document.getElementById('column-filter');
+    const filterInput = document.getElementById('filter-input');
+    
+    // Enable/Disable filter input based on selection
+    columnFilter.addEventListener('change', () => {
+        filterInput.disabled = columnFilter.value === "";
+        filterInput.placeholder = columnFilter.value === "" ? 
+            "Value to search in selected column" : 
+            `Search value for ${columnFilter.options[columnFilter.selectedIndex].text}`;
+    });
+    
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        const modal = document.getElementById('record-modal');
+        if (event.target === modal) {
+            closeModal();
+        }
+    }
+
+    // Live search on the main search bar
+    searchInput.addEventListener('input', applySearchFilter);
+
+    // Initial population of all possible column headers for filtering
+    populateFilterColumns();
+}
+
+// === API FETCHING ===
+
+async function fetchSummary() {
+    try {
+        const url = `${API_BASE_URL}?action=getSummary`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+        
+        if (data.result === 'success') {
+            document.getElementById('total-households').textContent = data.data.households;
+            document.getElementById('total-members').textContent = data.data.members;
+            document.getElementById('total-children').textContent = data.data.children;
+        } else {
+            document.getElementById('status-message').textContent = `Error fetching summary: ${data.message}`;
+        }
+    } catch (error) {
+        document.getElementById('status-message').textContent = `Failed to connect to API for summary: ${error.message}`;
+    }
+}
+
+async function fetchRecords() {
+    document.getElementById('status-message').textContent = "Fetching all records...";
+    try {
+        const url = `${API_BASE_URL}?action=getRecords`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+        
+        if (data.result === 'success') {
+            ALL_RECORDS = data.data;
+            DISPLAYED_RECORDS = ALL_RECORDS;
+            renderRecords(ALL_RECORDS);
+            document.getElementById('status-message').style.display = 'none';
+        } else {
+            document.getElementById('status-message').textContent = `Error fetching records: ${data.message}`;
+        }
+    } catch (error) {
+        document.getElementById('status-message').textContent = `Failed to connect to API for records: ${error.message}`;
+    }
+}
+
+
+// === DATA RENDERING AND FILTERING ===
+
+function populateFilterColumns() {
+    // Collect all unique keys from all data sources (Household, Member, Child)
+    const allKeys = new Set();
+    
+    if (ALL_RECORDS.length > 0) {
+        // Household keys
+        Object.keys(ALL_RECORDS[0].Household).forEach(key => allKeys.add(key));
+        
+        // Member keys (use first member of first record as a sample)
+        if (ALL_RECORDS[0].Members.length > 0) {
+            Object.keys(ALL_RECORDS[0].Members[0]).forEach(key => allKeys.add(key));
+        }
+        
+        // Child keys (use first child of first record as a sample)
+        if (ALL_RECORDS[0].Children.length > 0) {
+            Object.keys(ALL_RECORDS[0].Children[0]).forEach(key => allKeys.add(key));
+        }
+    }
+
+    const select = document.getElementById('column-filter');
+    const sortedKeys = Array.from(allKeys).sort();
+    
+    sortedKeys.forEach(key => {
+        // Skip private/internal keys if needed, e.g., 'Timestamp'
+        if (key.endsWith('_ID')) return; 
+        
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = key.replace(/_/g, ' ');
+        select.appendChild(option);
+    });
+}
+
+function applySearchFilter() {
+    const generalSearchTerm = document.getElementById('search-input').value.toLowerCase().trim();
+    const columnFilterKey = document.getElementById('column-filter').value;
+    const filterValue = document.getElementById('filter-input').value.toLowerCase().trim();
+
+    DISPLAYED_RECORDS = ALL_RECORDS.filter(record => {
+        // 1. General Search (First Name, Last Name, Block, Address)
+        let matchesGeneralSearch = false;
+        if (generalSearchTerm) {
+            // Check Household info
+            const household = record.Household;
+            if (
+                household.Block_Name.toLowerCase().includes(generalSearchTerm) ||
+                household.Residential_Address.toLowerCase().includes(generalSearchTerm)
+            ) {
+                matchesGeneralSearch = true;
+            }
+
+            // Check Member names
+            if (record.Members.some(m => 
+                m.First_Name.toLowerCase().includes(generalSearchTerm) || 
+                m.Last_Name.toLowerCase().includes(generalSearchTerm)
+            )) {
+                matchesGeneralSearch = true;
+            }
+        } else {
+            // If no general term, this check is passed
+            matchesGeneralSearch = true;
+        }
+        
+        // If there's a general search term and it doesn't match, we stop here.
+        if (generalSearchTerm && !matchesGeneralSearch) {
+            return false;
+        }
+
+        // 2. Column Filter (Advanced Filtering)
+        let matchesColumnFilter = false;
+        if (columnFilterKey && filterValue) {
+            // Check Household level
+            if (record.Household[columnFilterKey] && record.Household[columnFilterKey].toString().toLowerCase().includes(filterValue)) {
+                matchesColumnFilter = true;
+            }
+            // Check Member level
+            if (record.Members.some(m => m[columnFilterKey] && m[columnFilterKey].toString().toLowerCase().includes(filterValue))) {
+                matchesColumnFilter = true;
+            }
+            // Check Children level
+            if (record.Children.some(c => c[columnFilterKey] && c[columnFilterKey].toString().toLowerCase().includes(filterValue))) {
+                matchesColumnFilter = true;
+            }
+            
+            return matchesColumnFilter; // Must match the specific column filter
+        } else {
+            // If no specific column filter is set, this check is passed.
+            return true;
+        }
+        
+    });
+
+    renderRecords(DISPLAYED_RECORDS);
+}
+
+function resetFilters() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('column-filter').value = '';
+    document.getElementById('filter-input').value = '';
+    document.getElementById('filter-input').disabled = true;
+    applySearchFilter(); // This will re-render all records
+}
+
+function renderRecords(records) {
+    const tbody = document.getElementById('records-tbody');
+    tbody.innerHTML = '';
+
+    if (records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No records found matching your criteria.</td></tr>';
+        return;
+    }
+
+    records.forEach(record => {
+        const household = record.Household;
+        const row = tbody.insertRow();
+        row.dataset.householdId = household.Household_ID;
+        row.onclick = () => openModal(record.Household_ID);
+
+        // Cells: Household_ID, Block_Name, Residential_Address, Contact_No, #Members, #Children
+        row.insertCell().textContent = household.Household_ID;
+        row.insertCell().textContent = household.Block_Name;
+        row.insertCell().textContent = household.Residential_Address;
+        row.insertCell().textContent = household.Contact_No;
+        row.insertCell().textContent = record.Members.length;
+        row.insertCell().textContent = record.Children.length;
+    });
+}
+
+
+// === MODAL AND DETAIL VIEW ===
+
+function openModal(householdId) {
+    const record = ALL_RECORDS.find(r => r.Household.Household_ID === householdId);
+    if (!record) return;
+
+    const modalDetails = document.getElementById('modal-details');
+    modalDetails.innerHTML = ''; 
+
+    // Helper to format a key-value pair
+    const formatPair = (key, value) => {
+        const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const formattedValue = value instanceof Date ? value.toLocaleDateString() : (value || 'N/A');
+        return `<p><strong>${formattedKey}:</strong> ${formattedValue}</p>`;
+    };
+    
+    // 1. Household Section
+    let html = '<h2>Household Record: ' + record.Household.Household_ID + '</h2>';
+    html += '<h3>General Information</h3>';
+    for (const key in record.Household) {
+        if (key !== 'Household_ID') { // Don't show ID again
+            html += formatPair(key, record.Household[key]);
+        }
+    }
+
+    // 2. Members Section
+    html += '<h2>Adult Members (' + record.Members.length + ')</h2>';
+    record.Members.forEach((member, index) => {
+        html += `<div class="member-block"><h3>Member ${index + 1}: ${member.First_Name || ''} ${member.Last_Name || ''}</h3>`;
+        for (const key in member) {
+            if (key !== 'Household_ID' && key !== 'Member_ID') {
+                html += formatPair(key, member[key]);
+            }
+        }
+        html += '</div>';
+    });
+
+    // 3. Children Section
+    html += '<h2>Children Particulars (' + record.Children.length + ')</h2>';
+    record.Children.forEach((child, index) => {
+        html += `<div class="child-block"><h3>Child ${index + 1}: ${child.First_Name || ''} ${child.Last_Name || ''} (Age: ${child.Age || 'N/A'})</h3>`;
+        for (const key in child) {
+            if (key !== 'Household_ID' && key !== 'Child_ID') {
+                html += formatPair(key, child[key]);
+            }
+        }
+        html += '</div>';
+    });
+
+    modalDetails.innerHTML = html;
+    document.getElementById('record-modal').style.display = 'block';
+}
+
+function closeModal() {
+    document.getElementById('record-modal').style.display = 'none';
+}
