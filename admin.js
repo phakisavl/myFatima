@@ -1,12 +1,11 @@
 // 🚨 REPLACE THIS WITH YOUR GOOGLE APPS SCRIPT WEB APP URL 🚨
-// Ensure this link is correct for your Web App deployment
 const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbyzpmV3d2etqNpujAQUWcrRfs-hPcBjB20mru-64Pdf10kWv-3W3lwWf1Ya0S_Mj91-/exec'; 
 
 let ALL_RECORDS = []; 
 let DISPLAYED_RECORDS = []; 
+let ACTIVE_ROW = null; // To track the currently selected row
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // Start data fetching
     await fetchSummary();
     await fetchRecords();
     setupEventListeners();
@@ -17,7 +16,6 @@ function setupEventListeners() {
     const columnFilter = document.getElementById('column-filter');
     const filterInput = document.getElementById('filter-input');
     
-    // Enable/Disable filter input based on selection
     columnFilter.addEventListener('change', () => {
         filterInput.disabled = columnFilter.value === "";
         filterInput.placeholder = columnFilter.value === "" ? 
@@ -26,18 +24,8 @@ function setupEventListeners() {
         applySearchFilter(); 
     });
     
-    // Close modal when clicking outside
-    window.onclick = function(event) {
-        const modal = document.getElementById('record-modal');
-        if (event.target === modal) {
-            closeModal();
-        }
-    }
-
-    // Live search on the main search bar
     searchInput.addEventListener('input', applySearchFilter);
 
-    // Initial population of all possible column headers for filtering
     populateFilterColumns();
 }
 
@@ -175,7 +163,6 @@ function applySearchFilter() {
         } else {
             return matchesGeneralSearch; 
         }
-        
     });
 
     renderRecords(DISPLAYED_RECORDS);
@@ -203,8 +190,8 @@ function renderRecords(records) {
         const row = tbody.insertRow();
         row.dataset.householdId = household.Household_ID;
         
-        // 🌟 CRITICAL FIX: Ensure the row element itself has the click listener.
-        row.addEventListener('click', () => openModal(household.Household_ID));
+        // Attach the new handler: showDetailPanel
+        row.addEventListener('click', () => showDetailPanel(household.Household_ID, row));
 
         // Cells: Household_ID, Block_Name, Residential_Address, Contact_No, #Members, #Children
         row.insertCell().textContent = household.Household_ID;
@@ -217,24 +204,35 @@ function renderRecords(records) {
 }
 
 
-// === MODAL AND DETAIL VIEW ===
+// === DETAIL PANEL VIEW (REPLACING MODAL) ===
 
-function openModal(householdId) {
+function showDetailPanel(householdId, clickedRow) {
     const record = ALL_RECORDS.find(r => r.Household.Household_ID === householdId);
     if (!record) return;
 
-    const modalDetails = document.getElementById('modal-details');
-    modalDetails.innerHTML = ''; 
+    const detailContent = document.getElementById('detail-content');
+    const detailPanel = document.getElementById('detail-panel');
+    const printBtn = detailPanel.querySelector('.print-btn');
+    
+    // Highlight the clicked row
+    if (ACTIVE_ROW) {
+        ACTIVE_ROW.style.backgroundColor = '';
+    }
+    clickedRow.style.backgroundColor = '#d3eaff'; // Light blue highlight
+    ACTIVE_ROW = clickedRow;
 
     // Helper to format a key-value pair
     const formatPair = (key, value) => {
+        // Clean up the key name for display (e.g., "First_Name" -> "First Name")
         const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
         const formattedValue = value instanceof Date ? value.toLocaleDateString() : (value || 'N/A');
         return `<p><strong>${formattedKey}:</strong> ${formattedValue}</p>`;
     };
     
+    let html = '';
+
     // 1. Household Section
-    let html = '<h2>Household Record: ' + record.Household.Household_ID + '</h2>';
+    html += '<h2 style="color: #007bff; margin-top: 0;">Household Record: ' + record.Household.Household_ID + '</h2>';
     html += '<h3>General Information</h3>';
     for (const key in record.Household) {
         if (key !== 'Household_ID') { 
@@ -266,10 +264,7 @@ function openModal(householdId) {
         html += '</div>';
     });
 
-    modalDetails.innerHTML = html;
-    document.getElementById('record-modal').style.display = 'block';
-}
-
-function closeModal() {
-    document.getElementById('record-modal').style.display = 'none';
+    detailContent.innerHTML = html;
+    detailPanel.style.display = 'block'; // Show the panel
+    printBtn.style.display = 'block'; // Show the print button
 }
