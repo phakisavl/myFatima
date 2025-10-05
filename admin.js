@@ -2,10 +2,11 @@
 // Ensure this link is correct for your Web App deployment
 const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbyzpmV3d2etqNpujAQUWcrRfs-hPcBjB20mru-64Pdf10kWv-3W3lwWf1Ya0S_Mj91-/exec'; 
 
-let ALL_RECORDS = []; // Stores all fetched records
-let DISPLAYED_RECORDS = []; // Stores records currently shown in the table
+let ALL_RECORDS = []; 
+let DISPLAYED_RECORDS = []; 
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Start data fetching
     await fetchSummary();
     await fetchRecords();
     setupEventListeners();
@@ -22,7 +23,7 @@ function setupEventListeners() {
         filterInput.placeholder = columnFilter.value === "" ? 
             "Value to search in selected column" : 
             `Search value for ${columnFilter.options[columnFilter.selectedIndex].text}`;
-        applySearchFilter(); // Re-apply filter when column changes
+        applySearchFilter(); 
     });
     
     // Close modal when clicking outside
@@ -89,7 +90,6 @@ function populateFilterColumns() {
     const allKeys = new Set();
     
     if (ALL_RECORDS.length > 0) {
-        // Collect keys from Household, Member, and Child data
         const sample = ALL_RECORDS[0];
         Object.keys(sample.Household).forEach(key => allKeys.add(key));
         if (sample.Members.length > 0) {
@@ -104,7 +104,6 @@ function populateFilterColumns() {
     const sortedKeys = Array.from(allKeys).sort();
     
     sortedKeys.forEach(key => {
-        // Skip internal/unnecessary keys
         if (key.endsWith('_ID') || key === 'Timestamp' || key === 'Age') return; 
         
         const option = document.createElement('option');
@@ -120,7 +119,6 @@ function applySearchFilter() {
     const filterValue = document.getElementById('filter-input').value.toLowerCase().trim();
 
     DISPLAYED_RECORDS = ALL_RECORDS.filter(record => {
-        // 1. General Search (Household, Member, AND Child names)
         let matchesGeneralSearch = false;
         
         if (generalSearchTerm) {
@@ -142,7 +140,7 @@ function applySearchFilter() {
                 matchesGeneralSearch = true;
             }
             
-            // 🌟 FIX: Check Child names 🌟
+            // Check Child names
             if (record.Children.some(c => 
                 (c.First_Name && c.First_Name.toString().toLowerCase().includes(generalSearchTerm)) || 
                 (c.Last_Name && c.Last_Name.toString().toLowerCase().includes(generalSearchTerm))
@@ -150,11 +148,9 @@ function applySearchFilter() {
                 matchesGeneralSearch = true;
             }
         } else {
-            // If no general term, this check is passed
             matchesGeneralSearch = true;
         }
         
-        // If a general term is provided but no match is found, return false
         if (generalSearchTerm && !matchesGeneralSearch) {
             return false;
         }
@@ -175,9 +171,8 @@ function applySearchFilter() {
                 matchesColumnFilter = true;
             }
             
-            return matchesColumnFilter; // Must match the specific column filter
+            return matchesColumnFilter; 
         } else {
-            // If no specific column filter is set, this check is passed, combining with general search result.
             return matchesGeneralSearch; 
         }
         
@@ -208,8 +203,8 @@ function renderRecords(records) {
         const row = tbody.insertRow();
         row.dataset.householdId = household.Household_ID;
         
-        // 🌟 FIX: The click handler is attached here and is correct. The issue may have been with how the modal was initially hidden or how the data was loaded. The fetchRecords call should fix that.
-        row.onclick = () => openModal(record.Household_ID); 
+        // 🌟 CRITICAL FIX: Ensure the row element itself has the click listener.
+        row.addEventListener('click', () => openModal(household.Household_ID));
 
         // Cells: Household_ID, Block_Name, Residential_Address, Contact_No, #Members, #Children
         row.insertCell().textContent = household.Household_ID;
