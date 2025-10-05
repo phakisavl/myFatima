@@ -3,7 +3,7 @@ const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbyzpmV3d2etqNpujAQ
 
 let ALL_RECORDS = []; 
 let DISPLAYED_RECORDS = []; 
-let ACTIVE_ROW = null; // To track the currently selected row
+let ACTIVE_ROW = null; 
 
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchSummary();
@@ -26,8 +26,23 @@ function setupEventListeners() {
     
     searchInput.addEventListener('input', applySearchFilter);
 
+    // Event Delegation on the Table Body
+    document.getElementById('records-tbody').addEventListener('click', handleRecordClick);
+
     populateFilterColumns();
 }
+
+/**
+ * Handles clicks on the table body using delegation.
+ */
+function handleRecordClick(event) {
+    const clickedRow = event.target.closest('tr');
+
+    if (clickedRow && clickedRow.dataset.householdId) {
+        showDetailPanel(clickedRow.dataset.householdId, clickedRow);
+    }
+}
+
 
 // === API FETCHING ===
 
@@ -71,8 +86,8 @@ async function fetchRecords() {
     }
 }
 
-
 // === DATA RENDERING AND FILTERING ===
+// (Unchanged logic for filtering/searching)
 
 function populateFilterColumns() {
     const allKeys = new Set();
@@ -112,7 +127,6 @@ function applySearchFilter() {
         if (generalSearchTerm) {
             const household = record.Household;
             
-            // Check Household info
             if (
                 (household.Block_Name && household.Block_Name.toString().toLowerCase().includes(generalSearchTerm)) ||
                 (household.Residential_Address && household.Residential_Address.toString().toLowerCase().includes(generalSearchTerm))
@@ -120,7 +134,6 @@ function applySearchFilter() {
                 matchesGeneralSearch = true;
             }
 
-            // Check Member names
             if (record.Members.some(m => 
                 (m.First_Name && m.First_Name.toString().toLowerCase().includes(generalSearchTerm)) || 
                 (m.Last_Name && m.Last_Name.toString().toLowerCase().includes(generalSearchTerm))
@@ -128,7 +141,6 @@ function applySearchFilter() {
                 matchesGeneralSearch = true;
             }
             
-            // Check Child names
             if (record.Children.some(c => 
                 (c.First_Name && c.First_Name.toString().toLowerCase().includes(generalSearchTerm)) || 
                 (c.Last_Name && c.Last_Name.toString().toLowerCase().includes(generalSearchTerm))
@@ -143,18 +155,14 @@ function applySearchFilter() {
             return false;
         }
 
-        // 2. Column Filter (Advanced Filtering)
         let matchesColumnFilter = false;
         if (columnFilterKey && filterValue) {
-            // Check Household level
             if (record.Household[columnFilterKey] && record.Household[columnFilterKey].toString().toLowerCase().includes(filterValue)) {
                 matchesColumnFilter = true;
             }
-            // Check Member level
             if (record.Members.some(m => m[columnFilterKey] && m[columnFilterKey].toString().toLowerCase().includes(filterValue))) {
                 matchesColumnFilter = true;
             }
-            // Check Children level
             if (record.Children.some(c => c[columnFilterKey] && c[columnFilterKey].toString().toLowerCase().includes(filterValue))) {
                 matchesColumnFilter = true;
             }
@@ -190,10 +198,6 @@ function renderRecords(records) {
         const row = tbody.insertRow();
         row.dataset.householdId = household.Household_ID;
         
-        // Attach the new handler: showDetailPanel
-        row.addEventListener('click', () => showDetailPanel(household.Household_ID, row));
-
-        // Cells: Household_ID, Block_Name, Residential_Address, Contact_No, #Members, #Children
         row.insertCell().textContent = household.Household_ID;
         row.insertCell().textContent = household.Block_Name;
         row.insertCell().textContent = household.Residential_Address;
@@ -204,7 +208,7 @@ function renderRecords(records) {
 }
 
 
-// === DETAIL PANEL VIEW (REPLACING MODAL) ===
+// === DETAIL PANEL VIEW (PRINT & FORMATTING FIXES) ===
 
 function showDetailPanel(householdId, clickedRow) {
     const record = ALL_RECORDS.find(r => r.Household.Household_ID === householdId);
@@ -221,10 +225,26 @@ function showDetailPanel(householdId, clickedRow) {
     clickedRow.style.backgroundColor = '#d3eaff'; // Light blue highlight
     ACTIVE_ROW = clickedRow;
 
+    // 🌟 FIX: Enhanced Helper to format the key 🌟
+    const formatKeyForDisplay = (key) => {
+        // Handle YN (Yes/No) keys
+        if (key.endsWith('_YN')) {
+            key = key.slice(0, -3) + ' (Yes/No)';
+        }
+        // Specific replacements for clarity
+        if (key === 'First_Communion') return 'First Holy Communion';
+        if (key === 'Date_1st_Communion') return 'Date of First Communion';
+        if (key === 'Church_of_1st_Communion') return 'Church of First Communion';
+        if (key === 'Civil_Court_Marriage_Date') return 'Civil Marriage Date';
+
+
+        // Convert underscores to space and Title Case
+        return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    };
+
     // Helper to format a key-value pair
     const formatPair = (key, value) => {
-        // Clean up the key name for display (e.g., "First_Name" -> "First Name")
-        const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const formattedKey = formatKeyForDisplay(key);
         const formattedValue = value instanceof Date ? value.toLocaleDateString() : (value || 'N/A');
         return `<p><strong>${formattedKey}:</strong> ${formattedValue}</p>`;
     };
@@ -235,7 +255,7 @@ function showDetailPanel(householdId, clickedRow) {
     html += '<h2 style="color: #007bff; margin-top: 0;">Household Record: ' + record.Household.Household_ID + '</h2>';
     html += '<h3>General Information</h3>';
     for (const key in record.Household) {
-        if (key !== 'Household_ID') { 
+        if (key !== 'Household_ID' && key !== 'Timestamp') { 
             html += formatPair(key, record.Household[key]);
         }
     }
@@ -243,9 +263,9 @@ function showDetailPanel(householdId, clickedRow) {
     // 2. Members Section
     html += '<h2>Adult Members (' + record.Members.length + ')</h2>';
     record.Members.forEach((member, index) => {
-        html += `<div class="member-block"><h3>Member ${index + 1}: ${member.First_Name || ''} ${member.Last_Name || ''}</h3>`;
+        html += `<div class="member-block"><h3 style="margin-top:0;">Member ${index + 1}: ${member.First_Name || ''} ${member.Last_Name || ''}</h3>`;
         for (const key in member) {
-            if (key !== 'Household_ID' && key !== 'Member_ID') {
+            if (key !== 'Household_ID' && key !== 'Member_ID' && key !== 'Timestamp') {
                 html += formatPair(key, member[key]);
             }
         }
@@ -255,9 +275,9 @@ function showDetailPanel(householdId, clickedRow) {
     // 3. Children Section
     html += '<h2>Children Particulars (' + record.Children.length + ')</h2>';
     record.Children.forEach((child, index) => {
-        html += `<div class="child-block"><h3>Child ${index + 1}: ${child.First_Name || ''} ${child.Last_Name || ''} (Age: ${child.Age || 'N/A'})</h3>`;
+        html += `<div class="child-block"><h3 style="margin-top:0;">Child ${index + 1}: ${child.First_Name || ''} ${child.Last_Name || ''} (Age: ${child.Age || 'N/A'})</h3>`;
         for (const key in child) {
-            if (key !== 'Household_ID' && key !== 'Child_ID') {
+            if (key !== 'Household_ID' && key !== 'Child_ID' && key !== 'Timestamp') {
                 html += formatPair(key, child[key]);
             }
         }
@@ -265,6 +285,6 @@ function showDetailPanel(householdId, clickedRow) {
     });
 
     detailContent.innerHTML = html;
-    detailPanel.style.display = 'block'; // Show the panel
-    printBtn.style.display = 'block'; // Show the print button
+    detailPanel.style.display = 'block'; 
+    printBtn.style.display = 'block'; 
 }
