@@ -16,11 +16,11 @@
         .add-btn { background-color: #28a745; color: white; margin-top: 10px; }
         .remove-btn { background-color: #dc3545; color: white; margin-left: 10px; float: right; }
         #submit-btn { background-color: #007bff; color: white; width: 100%; margin-top: 20px; }
-        .section-box { border: 1px solid #ddd; padding: 15px; margin-top: 15px; border-radius: 6px; background-color: #fafafa; }
+        .section-box { border: 1px solid #ddd; padding: 15px; margin-top: 15px; border-radius: 6px; background-color: #fafafa; overflow: hidden; }
         .alert { padding: 15px; margin-top: 20px; border-radius: 4px; text-align: center; }
         .alert-success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
         .alert-error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
-        .sub-fields { border-left: 3px solid #007bff; padding-left: 10px; margin-left: 5px; }
+        .sub-fields { border-left: 3px solid #007bff; padding-left: 10px; margin-left: 5px; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -45,12 +45,12 @@
             <h2>Adult Members (Household)</h2>
             <div id="members-container">
                 </div>
-            <button type="button" class="add-btn" onclick="addMember()">+ Add Adult Member</button>
+            <button type="button" class="add-btn" id="add-member-btn">+ Add Adult Member</button>
 
             <h2>Children Particulars</h2>
             <div id="children-container">
                 </div>
-            <button type="button" class="add-btn" onclick="addChild()">+ Add Child</button>
+            <button type="button" class="add-btn" id="add-child-btn">+ Add Child</button>
 
             <button type="submit" id="submit-btn">Submit Census Data</button>
         </form>
@@ -60,7 +60,7 @@
 
         <template id="member-template">
             <div class="section-box member-section">
-                <button type="button" class="remove-btn" onclick="removeSection(this)">- Remove Member</button>
+                <button type="button" class="remove-btn">- Remove Member</button> 
                 <h3>Member <span class="member-number">1</span></h3>
                 
                 <div class="form-group">
@@ -120,7 +120,7 @@
         
         <template id="child-template">
             <div class="section-box child-section">
-                <button type="button" class="remove-btn" onclick="removeSection(this)">- Remove Child</button>
+                <button type="button" class="remove-btn">- Remove Child</button> 
                 <h3>Child <span class="child-number">1</span></h3>
                 <div class="form-group">
                     <label>First Name</label><input type="text" data-name="First_Name" required>
